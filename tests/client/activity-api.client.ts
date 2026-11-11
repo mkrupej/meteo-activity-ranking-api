@@ -8,11 +8,11 @@ export type Location = {
 export class ActivityApiClient {
   constructor(
     private readonly baseUrl = process.env.SUT_BASE_URL ??
-      "http://127.0.0.1:3000",
+      'http://127.0.0.1:3000',
   ) {}
 
   searchLocations(name: string): Promise<Response> {
-    return this.get("/locations?" + new URLSearchParams({ name }));
+    return this.get('/locations?' + new URLSearchParams({ name }));
   }
   async get(path: string): Promise<Response> {
     const url = new URL(path, this.baseUrl);

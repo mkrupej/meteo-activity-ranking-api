@@ -6,14 +6,9 @@
     "strict": true,
     "esModuleInterop": true,
     "noEmit": true,
-    "types": [
-      "node"
-    ],
+    "types": ["node"],
     "skipLibCheck": true,
     "noUncheckedIndexedAccess": true
   },
-  "include": [
-    "features/**/*.ts",
-    "tests/**/*.ts"
-  ]
+  "include": ["features/**/*.ts", "tests/**/*.ts"]
 }

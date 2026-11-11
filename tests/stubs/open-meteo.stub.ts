@@ -2,9 +2,9 @@ import {
   createServer,
   type IncomingMessage,
   type ServerResponse,
-} from "node:http";
+} from 'node:http';
 
-import type { Location } from "../client/activity-api.client";
+import type { Location } from '../client/activity-api.client';
 
 export class OpenMeteoStub {
   locationRequests = 0;
@@ -23,8 +23,8 @@ export class OpenMeteoStub {
 
   async start(): Promise<void> {
     await new Promise<void>((resolve, reject) => {
-      this.server.once("error", reject);
-      this.server.listen(3001, "127.0.0.1", resolve);
+      this.server.once('error', reject);
+      this.server.listen(3001, '127.0.0.1', resolve);
     });
   }
 
@@ -44,18 +44,18 @@ export class OpenMeteoStub {
     request: IncomingMessage,
     response: ServerResponse,
   ): void {
-    const url = new URL(request.url ?? "/", "http://127.0.0.1:3001");
+    const url = new URL(request.url ?? '/', 'http://127.0.0.1:3001');
 
-    response.setHeader("Content-Type", "application/json");
+    response.setHeader('Content-Type', 'application/json');
     this.recordRequest(url);
 
-    if (request.method !== "GET") {
+    if (request.method !== 'GET') {
       this.sendNotFound(response);
       return;
     }
 
     switch (url.pathname) {
-      case "/v1/search":
+      case '/v1/search':
         this.handleLocationSearch(url, response);
         break;
       default:
@@ -64,13 +64,13 @@ export class OpenMeteoStub {
   }
 
   private recordRequest(url: URL): void {
-    if (url.pathname === "/v1/search") {
+    if (url.pathname === '/v1/search') {
       this.locationRequests++;
     }
   }
 
   private handleLocationSearch(url: URL, response: ServerResponse): void {
-    if (url.searchParams.get("name") !== this.searchName) {
+    if (url.searchParams.get('name') !== this.searchName) {
       this.sendNotFound(response);
       return;
     }
@@ -93,7 +93,7 @@ export class OpenMeteoStub {
   private sendNotFound(response: ServerResponse): void {
     this.sendJson(response, 404, {
       error: true,
-      reason: "No matching stub response",
+      reason: 'No matching stub response',
     });
   }
 

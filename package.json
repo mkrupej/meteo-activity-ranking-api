@@ -4,8 +4,8 @@
   "type": "commonjs",
   "scripts": {
     "test": "cucumber-js",
-    "typecheck": "tsc"  
-    },
+    "typecheck": "tsc"
+  },
   "engines": {
     "node": ">=24"
   },
