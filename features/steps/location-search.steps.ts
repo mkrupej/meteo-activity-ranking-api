@@ -10,6 +10,13 @@ Given(
   },
 );
 
+Given(
+  'the location provider returns no matches for {string}',
+  function (this: TestWorld, name: string) {
+    this.openMeteoStub.setLocationMatches(name, []);
+  },
+);
+
 When(
   'I search for locations using {string}',
   async function (this: TestWorld, name: string) {
@@ -35,6 +42,14 @@ Then(
     );
 
     assert.deepEqual(actual, expected);
+  },
+);
+
+Then(
+  'the response contains an empty list of locations',
+  async function (this: TestWorld) {
+    const locations = await readLocations(this);
+    assert.deepEqual(locations, []);
   },
 );
 
