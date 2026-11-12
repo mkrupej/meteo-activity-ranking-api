@@ -5,12 +5,21 @@ import {
 } from 'node:http';
 
 import type { Location } from '../client/activity-api.client';
+import type { OpenMeteoForecast, TEST_LOCATION } from '../fixtures/weather';
 
 export class OpenMeteoStub {
   locationRequests = 0;
+  weatherRequests = 0;
+  forecastRequests: URL[] = [];
 
   private searchName?: string;
   private matches: Location[] = [];
+  private location?: typeof TEST_LOCATION;
+  private weatherStatus = 404;
+  private weatherBody: unknown = {
+    error: true,
+    reason: 'No forecast configured',
+  };
 
   private readonly server = createServer((request, response) => {
     this.handleRequest(request, response);
@@ -19,6 +28,15 @@ export class OpenMeteoStub {
   setLocationMatches(name: string, matches: Location[]): void {
     this.searchName = name;
     this.matches = matches;
+  }
+
+  setLocation(location: typeof TEST_LOCATION): void {
+    this.location = location;
+  }
+
+  setForecast(forecast: OpenMeteoForecast): void {
+    this.weatherStatus = 200;
+    this.weatherBody = forecast;
   }
 
   async start(): Promise<void> {
@@ -58,14 +76,25 @@ export class OpenMeteoStub {
       case '/v1/search':
         this.handleLocationSearch(url, response);
         break;
+      case '/v1/get':
+        this.handleLocationLookup(url, response);
+        break;
+      case '/v1/forecast':
+        this.handleForecast(response);
+        break;
       default:
         this.sendNotFound(response);
     }
   }
 
   private recordRequest(url: URL): void {
-    if (url.pathname === '/v1/search') {
+    if (url.pathname === '/v1/search' || url.pathname === '/v1/get') {
       this.locationRequests++;
+    }
+
+    if (url.pathname === '/v1/forecast') {
+      this.weatherRequests++;
+      this.forecastRequests.push(url);
     }
   }
 
@@ -88,6 +117,32 @@ export class OpenMeteoStub {
     }));
 
     this.sendJson(response, 200, { results });
+  }
+
+  private handleLocationLookup(url: URL, response: ServerResponse): void {
+    const requestedId = url.searchParams.get('id');
+
+    if (this.location && requestedId === this.location.id) {
+      const { id, name, country, region, latitude, longitude, timezone } =
+        this.location;
+
+      this.sendJson(response, 200, {
+        id: Number(id),
+        name,
+        country,
+        admin1: region,
+        latitude,
+        longitude,
+        timezone,
+      });
+      return;
+    }
+
+    this.sendNotFound(response);
+  }
+
+  private handleForecast(response: ServerResponse): void {
+    this.sendJson(response, this.weatherStatus, this.weatherBody);
   }
 
   private sendNotFound(response: ServerResponse): void {

@@ -14,6 +14,13 @@ export class ActivityApiClient {
   searchLocations(name: string): Promise<Response> {
     return this.get('/locations?' + new URLSearchParams({ name }));
   }
+
+  getActivityRankings(locationId: string): Promise<Response> {
+    return this.get(
+      '/activity-rankings?' + new URLSearchParams({ locationId }),
+    );
+  }
+
   async get(path: string): Promise<Response> {
     const url = new URL(path, this.baseUrl);
 
