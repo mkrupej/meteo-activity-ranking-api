@@ -33,12 +33,57 @@ Then(
   },
 );
 
+Then(
+  'the error message explains that the forecast is incomplete',
+  async function (this: TestWorld) {
+    const error = await readError(this);
+
+    assert.match(
+      error.message,
+      /incomplete/i,
+      'Expected the error message to explain that the forecast is incomplete',
+    );
+  },
+);
+
+Then(
+  'the response contains no activity rankings',
+  async function (this: TestWorld) {
+    assert.ok(this.response, 'No API response was received');
+
+    const body: unknown = await this.response.clone().json();
+
+    assert.ok(
+      typeof body === 'object' && body !== null && !Array.isArray(body),
+      'Expected a JSON object',
+    );
+
+    assert.ok(
+      !('days' in body),
+      'An error response must not contain activity rankings',
+    );
+  },
+);
+
+Then(
+  'the error message explains that the forecast is temporarily unavailable',
+  async function (this: TestWorld) {
+    const error = await readError(this);
+
+    assert.match(
+      error.message,
+      /temporarily unavailable/i,
+      'Expected the error message to explain that the forecast is temporarily unavailable',
+    );
+  },
+);
+
 async function readError(
   world: TestWorld,
 ): Promise<{ code: string; message: string }> {
   assert.ok(world.response, 'No API response was received');
 
-  const body: unknown = await world.response.json();
+  const body: unknown = await world.response.clone().json();
 
   assert.ok(
     typeof body === 'object' && body !== null && !Array.isArray(body),

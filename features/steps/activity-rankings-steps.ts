@@ -5,6 +5,7 @@ import {
   assertForecastRequest,
   assertReasoningIncludes,
   readRankings,
+  type ActivityRanking,
   type DayRanking,
 } from '../../tests/assertions/rankings';
 import type { WeatherConditions } from '../../tests/fixtures/weather';
@@ -51,12 +52,74 @@ Given('the forecast contains:', function (this: TestWorld, table: DataTable) {
   this.openMeteoStub.setForecast(this.forecast);
 });
 
+Given(
+  'location identifier {string} does not identify an existing location',
+  function (this: TestWorld, id: string) {
+    this.openMeteoStub.setUnknownLocation(id);
+  },
+);
+
+Given(
+  'the forecast has this problem: {string}',
+  function (this: TestWorld, problem: string) {
+    assert.ok(this.forecast, 'Configure a complete forecast first');
+
+    const daily = this.forecast.daily;
+    assert.ok(daily.temperature_2m_max, 'Expected temperature data');
+
+    switch (problem) {
+      case 'the final required day is missing':
+        daily.time.pop();
+        daily.temperature_2m_max.pop();
+        daily.precipitation_sum.pop();
+        daily.snowfall_sum.pop();
+        daily.wind_speed_10m_max.pop();
+        break;
+
+      case 'one required date is replaced by a duplicate of another': {
+        const firstDate = daily.time[0];
+        assert.ok(firstDate, 'Expected a first forecast date');
+
+        daily.time[6] = firstDate;
+        break;
+      }
+
+      case 'maximum temperature is missing for one day':
+        daily.temperature_2m_max.splice(3, 1);
+        break;
+
+      case 'maximum temperature is null for one day':
+        daily.temperature_2m_max[3] = null;
+        break;
+
+      default:
+        throw new Error(`Unknown forecast problem: ${problem}`);
+    }
+
+    this.openMeteoStub.setForecast(this.forecast);
+  },
+);
+
+Given(
+  'the weather provider returns HTTP {int}',
+  function (this: TestWorld, status: number) {
+    this.openMeteoStub.setWeatherError(status);
+  },
+);
+
 When(
   'I request activity rankings for that location',
   async function (this: TestWorld) {
     assert.ok(this.selectedLocationId, 'Expected a selected location ID');
 
     this.response = await this.api.getActivityRankings(this.selectedLocationId);
+  },
+);
+
+Given(
+  'the weather provider does not respond before the configured provider timeout',
+  function (this: TestWorld) {
+    this.openMeteoStub.setWeatherTimeout();
   },
 );
 
@@ -135,9 +198,7 @@ Then(
       );
 
       for (const day of days) {
-        const ranking = day.activities.find((item) => item.name === activity);
-
-        assert.ok(ranking, `Missing ${activity} on ${day.date}`);
+        const ranking = findActivity(day, activity);
 
         assertReasoningIncludes(
           ranking.reasoning,
@@ -204,9 +265,7 @@ Then(
         'Expected a non-empty reason in the table',
       );
 
-      const ranking = day.activities.find((item) => item.name === activity);
-
-      assert.ok(ranking, `Missing ${activity} on ${day.date}`);
+      const ranking = findActivity(day, activity);
 
       assertReasoningIncludes(
         ranking.reasoning,
@@ -216,6 +275,87 @@ Then(
     }
   },
 );
+
+Then(
+  '{string} has suitability {string} on every day',
+  async function (this: TestWorld, name: string, expected: string) {
+    const { days } = await readRankings(this.response);
+
+    for (const day of days) {
+      const activity = findActivity(day, name);
+
+      assert.equal(
+        activity.suitability,
+        expected,
+        `Incorrect suitability for ${name} on ${day.date}`,
+      );
+    }
+  },
+);
+
+Then(
+  'the reasoning for {string} includes {string}',
+  async function (this: TestWorld, name: string, expected: string) {
+    assert.ok(expected.trim(), 'Expected a non-empty reason');
+
+    const { days } = await readRankings(this.response);
+
+    for (const day of days) {
+      const activity = findActivity(day, name);
+
+      assertReasoningIncludes(
+        activity.reasoning,
+        expected,
+        `${day.date}: ${name}`,
+      );
+    }
+  },
+);
+
+Then(
+  'the unknown location is looked up: {word}',
+  function (this: TestWorld, lookup: string) {
+    assert.ok(
+      lookup === 'yes' || lookup === 'no',
+      'Expected lookup to be yes or no',
+    );
+
+    if (lookup === 'no') {
+      assert.equal(
+        this.openMeteoStub.locationRequests,
+        0,
+        'The location provider should not be queried',
+      );
+      return;
+    }
+
+    assert.ok(
+      this.openMeteoStub.locationRequests > 0,
+      'The location provider was not queried',
+    );
+
+    assert.equal(
+      this.openMeteoStub.unknownLocationResponseStatus,
+      400,
+      'Expected the provider to return 400 for the unknown location',
+    );
+  },
+);
+
+Then('no weather forecast is requested', function (this: TestWorld) {
+  assert.equal(
+    this.openMeteoStub.weatherRequests,
+    0,
+    'The weather provider should not be queried',
+  );
+});
+
+Then('the weather provider is queried', function (this: TestWorld) {
+  assert.ok(
+    this.openMeteoStub.weatherRequests > 0,
+    'The weather provider was not queried',
+  );
+});
 
 function prepareForecast(this: TestWorld): void {
   this.forecastDates = createForecastDates(TEST_LOCATION.timezone);
@@ -267,4 +407,17 @@ function findDay(
   assert.ok(day, `Missing forecast day ${number}`);
 
   return day;
+}
+
+function findActivity(
+  day: DayRanking,
+  name: string | undefined,
+): ActivityRanking {
+  assert.ok(name, 'Expected an activity name');
+
+  const activity = day.activities.find((item) => item.name === name);
+
+  assert.ok(activity, `Missing ${name} on ${day.date}`);
+
+  return activity;
 }

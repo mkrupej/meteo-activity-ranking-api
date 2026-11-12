@@ -9,6 +9,7 @@ import type { OpenMeteoForecast, TEST_LOCATION } from '../fixtures/weather';
 
 export class OpenMeteoStub {
   locationRequests = 0;
+  unknownLocationResponseStatus?: number;
   weatherRequests = 0;
   forecastRequests: URL[] = [];
 
@@ -20,6 +21,8 @@ export class OpenMeteoStub {
     error: true,
     reason: 'No forecast configured',
   };
+  private unknownLocationId?: string;
+  private weatherTimeout = false;
 
   private readonly server = createServer((request, response) => {
     this.handleRequest(request, response);
@@ -33,10 +36,27 @@ export class OpenMeteoStub {
   setLocation(location: typeof TEST_LOCATION): void {
     this.location = location;
   }
+  setUnknownLocation(id: string): void {
+    this.unknownLocationId = id;
+  }
 
   setForecast(forecast: OpenMeteoForecast): void {
     this.weatherStatus = 200;
     this.weatherBody = forecast;
+    this.weatherTimeout = false;
+  }
+
+  setWeatherError(status: number): void {
+    this.weatherStatus = status;
+    this.weatherBody = {
+      error: true,
+      reason: 'Weather provider unavailable',
+    };
+    this.weatherTimeout = false;
+  }
+
+  setWeatherTimeout(): void {
+    this.weatherTimeout = true;
   }
 
   async start(): Promise<void> {
@@ -122,6 +142,20 @@ export class OpenMeteoStub {
   private handleLocationLookup(url: URL, response: ServerResponse): void {
     const requestedId = url.searchParams.get('id');
 
+    if (
+      this.unknownLocationId !== undefined &&
+      requestedId === this.unknownLocationId
+    ) {
+      // The API should translate this provider response from 400 to 404 LOCATION_NOT_FOUND.
+      this.sendJson(response, 400, {
+        error: true,
+        reason: 'Location not found',
+      });
+
+      this.unknownLocationResponseStatus = response.statusCode;
+      return;
+    }
+
     if (this.location && requestedId === this.location.id) {
       const { id, name, country, region, latitude, longitude, timezone } =
         this.location;
@@ -142,6 +176,9 @@ export class OpenMeteoStub {
   }
 
   private handleForecast(response: ServerResponse): void {
+    // Leave the connection open so the API must enforce its own provider timeout.
+    if (this.weatherTimeout) return;
+
     this.sendJson(response, this.weatherStatus, this.weatherBody);
   }
 
