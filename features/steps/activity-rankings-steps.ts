@@ -5,6 +5,7 @@ import {
   assertForecastRequest,
   assertReasoningIncludes,
   readRankings,
+  type DayRanking,
 } from '../../tests/assertions/rankings';
 import type { WeatherConditions } from '../../tests/fixtures/weather';
 import {
@@ -34,6 +35,21 @@ Given(
     this.openMeteoStub.setForecast(this.forecast);
   },
 );
+
+Given('the forecast contains:', function (this: TestWorld, table: DataTable) {
+  const rows = table.hashes();
+
+  assert.deepEqual(
+    rows.map((row) => row.day),
+    ['1', '2', '3', '4', '5', '6', '7'],
+    'Expected forecast rows for days 1 to 7 in order',
+  );
+
+  const conditions = rows.map(readWeather);
+
+  this.forecast = createForecast(this.forecastDates, conditions);
+  this.openMeteoStub.setForecast(this.forecast);
+});
 
 When(
   'I request activity rankings for that location',
@@ -133,6 +149,74 @@ Then(
   },
 );
 
+Then(
+  'the activities for each forecast date appear in this order:',
+  async function (this: TestWorld, table: DataTable) {
+    const { days } = await readRankings(this.response);
+
+    for (const row of table.hashes()) {
+      const day = findDay(days, row.day);
+
+      const actual = day.activities.map((activity) => activity.name);
+      const expected = [row.first, row.second, row.third, row.fourth];
+
+      assert.deepEqual(
+        actual,
+        expected,
+        `Incorrect activity order for ${day.date}`,
+      );
+    }
+  },
+);
+
+Then(
+  'the suitability levels in that order are:',
+  async function (this: TestWorld, table: DataTable) {
+    const { days } = await readRankings(this.response);
+
+    for (const row of table.hashes()) {
+      const day = findDay(days, row.day);
+
+      const actual = day.activities.map((activity) => activity.suitability);
+      const expected = [row.first, row.second, row.third, row.fourth];
+
+      assert.deepEqual(
+        actual,
+        expected,
+        `Incorrect suitability for ${day.date}`,
+      );
+    }
+  },
+);
+
+Then(
+  'the reasoning for each forecast date includes:',
+  async function (this: TestWorld, table: DataTable) {
+    const { days } = await readRankings(this.response);
+
+    for (const row of table.hashes()) {
+      const day = findDay(days, row.day);
+      const { activity, reason } = row;
+
+      assert.ok(activity, 'Expected an activity name in the table');
+      assert.ok(
+        typeof reason === 'string' && reason.trim(),
+        'Expected a non-empty reason in the table',
+      );
+
+      const ranking = day.activities.find((item) => item.name === activity);
+
+      assert.ok(ranking, `Missing ${activity} on ${day.date}`);
+
+      assertReasoningIncludes(
+        ranking.reasoning,
+        reason,
+        `${day.date}: ${activity}`,
+      );
+    }
+  },
+);
+
 function prepareForecast(this: TestWorld): void {
   this.forecastDates = createForecastDates(TEST_LOCATION.timezone);
 
@@ -165,4 +249,22 @@ function readWeather(row: Record<string, string>): WeatherConditions {
     snowfall: readNumber('snowfall'),
     wind: readNumber('maximum wind speed'),
   };
+}
+
+function findDay(
+  days: DayRanking[],
+  dayNumber: string | undefined,
+): DayRanking {
+  const number = Number(dayNumber);
+
+  assert.ok(
+    Number.isInteger(number) && number >= 1 && number <= 7,
+    `Expected a day number from 1 to 7, received "${dayNumber}"`,
+  );
+
+  const day = days[number - 1];
+
+  assert.ok(day, `Missing forecast day ${number}`);
+
+  return day;
 }
